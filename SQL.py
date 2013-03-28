@@ -69,7 +69,7 @@ class SQL:
                MySQLdb.escape_string(tweet['user']['screen_name'].encode('utf-8').strip()),
                MySQLdb.escape_string(tweet['user']['name'].encode('utf-8').strip()),
                tweet['user']['followers_count'],
-               tweet['user']['followers_count'],
+               tweet['user']['friends_count'],
                MySQLdb.escape_string(tweet['user']['description'].encode('utf-8').strip()),
                MySQLdb.escape_string(tweet['user']['image_url'].encode('utf-8').strip()),
                tweet['tweet']['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
