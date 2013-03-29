@@ -48,3 +48,5 @@ CREATE TABLE tweet_links(tweet_id BIGINT(20) UNSIGNED PRIMARY KEY,
 CREATE TABLE tweet_json_cache(tweet_id BIGINT(20) UNSIGNED PRIMARY KEY, 
 				json_raw TEXT, 
 			FOREIGN KEY(tweet_id) REFERENCES tweets(tweet_id))ENGINE = InnoDB;
+			
+CREATE TABLE user_list(user_id  BIGINT(20) UNSIGNED, list_name VARCHAR(200), list_owner VARCHAR(25), PRIMARY KEY(user_id, list_name))ENGINE = InnoDB;

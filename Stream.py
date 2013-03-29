@@ -11,11 +11,10 @@ json = import_simplejson()
 class Stream:
     
     def __init__(self, consumer_key, consumer_secret, 
-                       key, secret, filter, name):
+                       key, secret, name):
         
         self.auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
         self.auth.set_access_token(key, secret)
-        self.filter = filter
         self.tweetsBuffer = TweetsBuffer()
         self.name = name
         self.logger = logging.getLogger('TwitterCollector')
@@ -25,7 +24,7 @@ class Stream:
             logging.error("Invalid credentials for user: "+self.name+".\nExiting...")
             exit(0)
 
-    def run(self):
+    def run(self, users_list = None):
         
         sl = StreamListener()
         sl.init(self.tweetsBuffer)
@@ -36,19 +35,58 @@ class Stream:
                                      include_entities=1, 
                                      include_rts=1)
             
-            #load friends, if there is no ids file
-            if not self.filter:
-                self.filter = tweepy.API(self.auth).friends_ids()
-            sThread = threading.Thread(target=streamer.filter, args=(self.filter,))
-            #sThread = threading.Thread(target=streamer.filter, args=(None, ['hello']))
+            
+            #load friends
+            filter = []
+            if users_list is None:
+                filter = tweepy.API(self.auth).friends_ids()
+            else:
+                for subList in users_list:
+                    for user in subList['users']:
+                        filter.append(user.id)
+                    
+            
+            #remove duplicates
+            filter = list(set(filter))
+            
+            
+            sThread = threading.Thread(target=streamer.filter, args=(filter,))
             sThread.start()
             return sThread
+        
         except Exception, e:
             print e
     
     def getTweetsBuffer(self):
         return self.tweetsBuffer
-
+    
+    def getUserList(self, lists):
+        if lists is None:
+            return None
+        
+        api = tweepy.API(self.auth)
+        
+        users_list = []
+        
+        for list in lists:
+            users = []
+            members = tweepy.Cursor(
+                                    api.list_members, 
+                                    list['owner'], 
+                                    list['slug']
+                                    ).items()
+            for member in members:
+                users.append(member)
+        
+            users_list.append(
+                    {
+                    'owner' : list['owner'],
+                    'slug'  : list['slug'],
+                    'users' : users
+                    })
+            
+        return users_list
+    
 class StreamListener(tweepy.StreamListener):
     
     def init(self, tweetsBuffer):
@@ -58,7 +96,7 @@ class StreamListener(tweepy.StreamListener):
     def parse_status(self, status, retweet = False):
         
         tweet = {
-                 'tweet_id':status.id, 
+                     'tweet_id':status.id, 
                      'tweet_text':status.text,
                      'created_at':status.created_at,
                      'geo_lat':status.coordinates['coordinates'][0] 
@@ -76,11 +114,11 @@ class StreamListener(tweepy.StreamListener):
 		             'urls': status.entities['urls'],
                      'hashtags':status.entities['hashtags'],
                      'mentions': status.entities['user_mentions']
-                     }
+                }
         
         #parse user object
         user = {
-                'user_id':status.user.id,
+                    'user_id':status.user.id,
                     'screen_name': status.user.screen_name,
                     'name': status.user.name,
                     'followers_count': status.user.followers_count,
@@ -93,7 +131,7 @@ class StreamListener(tweepy.StreamListener):
                                 if not status.user.location is None
                                    else "N/A",
                     'created_at': status.user.created_at
-                    }
+                }
         
         return {'tweet':tweet, 'user':user}
     

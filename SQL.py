@@ -1,6 +1,7 @@
 import MySQLdb
 import logging
 import urllib2
+from django.utils.encoding import smart_str, smart_unicode
 
 class SQL:
     def __init__(self, host, db_user, db_pass, shorteners_file = None):
@@ -69,10 +70,10 @@ class SQL:
                MySQLdb.escape_string(tweet['user']['screen_name'].encode('utf-8').strip()),
                MySQLdb.escape_string(tweet['user']['name'].encode('utf-8').strip()),
                tweet['user']['followers_count'],
-               tweet['user']['followers_count'],
+               tweet['user']['friends_count'],
                MySQLdb.escape_string(tweet['user']['description'].encode('utf-8').strip()),
                MySQLdb.escape_string(tweet['user']['image_url'].encode('utf-8').strip()),
-               tweet['tweet']['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+               tweet['user']['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
                MySQLdb.escape_string(tweet['user']['location'].encode('utf-8').strip())
                )
              
@@ -126,7 +127,8 @@ class SQL:
                 tmp_sql = sql\
                 %(
                   tweet['tweet']['tweet_id'],
-                  MySQLdb.escape_string(hashtag['text']).encode('utf-8').strip(),
+                  #MySQLdb.escape_string(hashtag['text']).encode('utf-8').strip(),
+                  MySQLdb.escape_string(smart_str(hashtag['text'])).strip(),
                   tweet['tweet']['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
                   tweet['user']['user_id']
                  )
@@ -222,7 +224,43 @@ class SQL:
         self.__insert_mentions(tweet)
         self.__insert_urls(tweet)
         self.__insert_raw_JSON(tweet)
+    
+    def insert_into_userList(self, list, db):
+        """ Insert user info into db.
+            
+            Args:
+            db: Name of db to use
+            list: list object containing parsed users and list
+        """
+        if list is None:
+            return
+        try:
+            #select db
+            self.db_con.select_db(db)
+            self.cursor = self.db_con.cursor()
         
+        
+            sql = "INSERT INTO user_list VALUES(%d, '%s', '%s')"
+            
+            print 'Inserting users into user list'
+            self.logger.info('Inserting users into user list')
+            
+            for subList in list:
+                for user in subList['users']:
+                    try:
+                        tmpSql = sql\
+                                %(
+                                  user.id,
+                                  subList['slug'],
+                                  subList['owner']
+                                  )
+                        self.cursor.execute(tmpSql)
+                
+                    except Exception, e: pass
+        
+        except Exception, e:
+            self.print_err('insert_into_userlist', str(e))
+            
     ###################################################################################
     ################################ END insert methods ###############################
     ###################################################################################

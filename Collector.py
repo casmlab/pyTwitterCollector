@@ -6,6 +6,8 @@ import argparse
 import re
 import threading
 import time
+import sys
+import os
 
 class Collector():
     DEFAULT_CONFIG_FILE = "collector.config"
@@ -34,13 +36,13 @@ class Collector():
             exit(0)
         #check config file for missing DB options
         if "db_info" not in configParser.sections():
-            print "Config file missing database info.\nExiting..."
+            print "Config filuser_ide missing database info.\nExiting..."
             self.logger.error("Config file missing database info.\nExiting...")
             exit(0)
         
         users = []
         try:
-            self.logger.info("Parsing config file: " + file)
+            self.logger.info("Parsing config file: ' " + file + " '")
             sections = configParser.sections(); sections.remove("db_info")
             #get db info
             db_info = {"db_host": configParser.get("db_info", "db_host"),
@@ -56,7 +58,7 @@ class Collector():
                     "con_secret"   : configParser.get(section, "con_secret"),
                     "key"          : configParser.get(section, "key"),
                     "secret"       : configParser.get(section, "secret"),
-                    "include_path" : configParser.get(section, "include_path"),
+                    "lists"        : configParser.get(section, "lists"),
                     "db"           : configParser.get(section, "db")}
                              )
                 #test db
@@ -68,24 +70,25 @@ class Collector():
             exit(0)
         return users
     
-    def loadList(self, file):
-        if file.lower() == "none" or not file:
+    def parseLists(self, lists):
+        if lists.lower() == "none" or not lists:
             return None
         try:
-            regex = re.compile(' +|,+|\n')
-            with open(file) as inFile: 
-                lists = regex.split(inFile.read().rstrip())
-            lists = filter(None, ids)
+            regex = re.compile(',+')
+            
+            lists = regex.split(lists.replace(" ", ""))
+            lists = filter(None, lists)
             
             listOS = []
             for list in lists:
                 listOS.append({'owner' : list[:list.index(":")],
-                               'slug'  : list[list.index(":"):]})
-            print listOS
+                               'slug'  : list[list.index(":")+1:]})
+                
             return listOS
         except IOError as e:
-            print "File \"", file, "\" does not exist.\nExiting..."
-            self.logger.error("File \""+file+"\" does not exist.\nExiting...")
+            err = "Error parsing lists"
+            print err
+            self.logger.error(err)
             exit(0)
             
     def parseArgList(self):
@@ -108,6 +111,7 @@ class Collector():
         
         
     def start(self, users):
+        print "Starting..."
         #start Twitter stream
         streamThreads  = []
         streamBuffers  = []
@@ -115,24 +119,36 @@ class Collector():
         for user in users:
             sr = Stream(user['con_key'], user['con_secret'], 
                         user['key'], user['secret'], 
-                        self.loadList(user['include_path']),
                         user['name'])
             
+            #insert user list into db
+            list = sr.getUserList(self.parseLists(user['lists']))
+            
+            self.sql.insert_into_userList(list, user['db'])
+            
+            #get buffer and run stream
             buff = sr.getTweetsBuffer()
-            stream = sr.run()
+	    if list is not None:
+            	stream = sr.run(list)
+	    else:
+		  stream = sr.run(None)
             #add new buff and stream to list
             streamBuffers.append({'buff':buff, 'db':user['db']})
             streamThreads.append(stream)
             print "Started user: " + user['name']
             self.logger.info("Started user: " + user['name'])
-            
+
         while True:
-            for buffer in streamBuffers:
-                tweet = buffer['buff'].pop()
-                if not tweet:
-                    time.sleep(1)
-                else:
-                    self.sql.insert_into(buffer['db'], tweet)
+            try:
+                for buffer in streamBuffers:
+                    tweet = buffer['buff'].pop()
+                    if not tweet:
+                        time.sleep(1)
+                    else:
+                        self.sql.insert_into(buffer['db'], tweet)
+            except KeyboardInterrupt:
+                print "Exiting..."
+                os._exit(0)
 
 if __name__ == "__main__":
     Collector().parseArgList()
